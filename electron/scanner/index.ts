@@ -1,6 +1,4 @@
-import { MacScanner } from './mac-scanner';
 import { WinMftScanner } from './win-mft-scanner';
-import { LinuxScanner } from './linux-scanner';
 
 export interface ScanResult {
   items: any[];
@@ -13,7 +11,7 @@ export interface ScanResult {
 }
 
 export class DiskScanner {
-  private activeScanner: MacScanner | WinMftScanner | LinuxScanner | null = null;
+  private activeScanner: WinMftScanner | null = null;
 
   start(
     rootPath: string,
@@ -25,15 +23,12 @@ export class DiskScanner {
       this.activeScanner.stop();
     }
 
-    const platform = process.platform;
-    if (platform === 'darwin') {
-      this.activeScanner = new MacScanner();
-    } else if (platform === 'win32') {
-      this.activeScanner = new WinMftScanner();
-    } else {
-      this.activeScanner = new LinuxScanner();
+    if (process.platform !== 'win32') {
+      onError(new Error('This application only supports Windows.'));
+      return;
     }
 
+    this.activeScanner = new WinMftScanner();
     this.activeScanner.start(
       rootPath,
       onProgress,
@@ -54,6 +49,6 @@ export class DiskScanner {
       const winScanner = new WinMftScanner();
       return await winScanner.checkAdmin();
     }
-    return true;
+    return false;
   }
 }

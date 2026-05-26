@@ -14,12 +14,6 @@ module.exports = {
   files: [
     "dist/**/*"
   ],
-  mac: {
-    target: ["dmg", "zip"],
-    category: "public.app-category.utilities",
-    hardenedRuntime: true,
-    gatekeeperAssess: false
-  },
   win: {
     target: [{
       target: "nsis",
@@ -30,9 +24,5 @@ module.exports = {
     oneClick: false,
     allowToChangeInstallationDirectory: true,
     createDesktopShortcut: true
-  },
-  linux: {
-    target: ["AppImage", "deb"],
-    category: "Utility"
   }
 };

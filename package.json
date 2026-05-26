@@ -1,7 +1,7 @@
 {
   "name": "disklens",
   "version": "1.0.0",
-  "description": "Ultra-fast premium Disk Space Analyzer for Mac, Windows & Linux",
+  "description": "Ultra-fast premium Disk Space Analyzer for Windows",
   "main": "dist/main.js",
   "scripts": {
     "dev": "vite",
