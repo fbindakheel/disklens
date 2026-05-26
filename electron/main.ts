@@ -28,7 +28,6 @@ async function createWindow() {
   const devUrl = process.env.ELECTRON_DEV_URL;
   if (devUrl) {
     mainWindow.loadURL(devUrl);
-    mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, 'index.html'));
   }
