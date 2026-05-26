@@ -348,7 +348,7 @@ export default function TableView({ onRefreshAfterDelete }: TableViewProps) {
             onClick={() => setContextMenu(null)}
           />
           <div
-            className="absolute z-50 bg-slate-900 border border-slate-800 rounded-xl py-1.5 shadow-2xl min-w-[170px]"
+            className="fixed z-50 bg-slate-900 border border-slate-800 rounded-xl py-1.5 shadow-2xl min-w-[170px]"
             style={{
               left: `${contextMenu.x}px`,
               top: `${contextMenu.y}px`
@@ -372,7 +372,7 @@ export default function TableView({ onRefreshAfterDelete }: TableViewProps) {
               className="w-full flex items-center space-x-2 px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 text-left"
             >
               <ExternalLink className="h-3.5 w-3.5" />
-              <span>Show in Finder</span>
+              <span>Show in Explorer</span>
             </button>
             <button
               onClick={() => {

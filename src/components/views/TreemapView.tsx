@@ -108,10 +108,41 @@ export default function TreemapView({ rootNode }: TreemapViewProps) {
     const height = 500;
     svg.attr('viewBox', `0 0 ${width} ${height}`);
 
+    // Helper to find the depth-1 ancestor (direct child of the current view root)
+    const getTopAncestorName = (d: d3.HierarchyNode<TreeMapNode>): string => {
+      let curr = d;
+      while (curr.parent && curr.parent.depth > 0) {
+        curr = curr.parent;
+      }
+      return curr.data.name;
+    };
+
+    // Build a beautiful color palette dynamically
+    const topAncestors = Array.from(new Set(hierarchyData.leaves().map(getTopAncestorName)));
+    const colors = [
+      '#0ea5e9', // sky blue
+      '#8b5cf6', // violet
+      '#ec4899', // pink
+      '#10b981', // emerald
+      '#f59e0b', // amber
+      '#ef4444', // red
+      '#6366f1', // indigo
+      '#14b8a6', // teal
+      '#f97316', // orange
+      '#06b6d4', // cyan
+      '#84cc16', // lime
+      '#d946ef'  // fuchsia
+    ];
+
+    const colorScale = d3.scaleOrdinal<string>()
+      .domain(topAncestors)
+      .range(colors);
+
     if (chartType === 'treemap') {
       const treemap = d3.treemap<TreeMapNode>()
         .size([width, height])
-        .padding(1)
+        .paddingOuter(3)
+        .paddingInner(2)
         .round(true);
 
       const root = treemap(hierarchyData);
@@ -123,10 +154,14 @@ export default function TreemapView({ rootNode }: TreemapViewProps) {
         .attr('transform', d => `translate(${d.x0},${d.y0})`);
 
       cell.append('rect')
-        .attr('width', d => d.x1 - d.x0)
-        .attr('height', d => d.y1 - d.y0)
-        .attr('fill', d => colorMap[d.data.type] || colorMap.other)
-        .attr('opacity', 0.8)
+        .attr('width', d => Math.max(0, d.x1 - d.x0))
+        .attr('height', d => Math.max(0, d.y1 - d.y0))
+        .attr('fill', d => colorScale(getTopAncestorName(d)))
+        .attr('opacity', 0.85)
+        .attr('stroke', '#0b0f19') // Matches background dark mode
+        .attr('stroke-width', 1.5)
+        .attr('rx', 4)
+        .attr('ry', 4)
         .attr('class', 'cursor-pointer hover:opacity-100 transition-opacity')
         .on('click', (event, d) => {
           if (d.data.isDir) {
@@ -135,9 +170,9 @@ export default function TreemapView({ rootNode }: TreemapViewProps) {
         });
 
       cell.append('text')
-        .attr('x', 4)
-        .attr('y', 14)
-        .text(d => (d.x1 - d.x0 > 50 && d.y1 - d.y0 > 25) ? d.data.name : '')
+        .attr('x', 6)
+        .attr('y', 16)
+        .text(d => (d.x1 - d.x0 > 55 && d.y1 - d.y0 > 28) ? d.data.name : '')
         .attr('fill', '#ffffff')
         .attr('font-size', '10px')
         .attr('font-weight', 'bold')
@@ -165,9 +200,9 @@ export default function TreemapView({ rootNode }: TreemapViewProps) {
         .enter()
         .append('path')
         .attr('d', arc)
-        .attr('fill', d => colorMap[d.data.type] || colorMap.other)
-        .attr('stroke', '#1e293b')
-        .attr('stroke-width', 0.5)
+        .attr('fill', d => colorScale(getTopAncestorName(d)))
+        .attr('stroke', '#0b0f19')
+        .attr('stroke-width', 1)
         .attr('opacity', 0.85)
         .attr('class', 'cursor-pointer hover:opacity-100 transition-opacity')
         .on('click', (event, d) => {
@@ -210,7 +245,7 @@ export default function TreemapView({ rootNode }: TreemapViewProps) {
         .attr('y', d => y(d.data.name) || 0)
         .attr('width', d => x(d.value || 0))
         .attr('height', y.bandwidth())
-        .attr('fill', '#4f98a3')
+        .attr('fill', d => colorScale(d.data.name))
         .attr('class', 'cursor-pointer hover:opacity-90 transition-opacity')
         .on('click', (event, d) => {
           if (d.data.isDir) {
