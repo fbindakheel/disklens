@@ -101,8 +101,12 @@ export default function CleanupView({ onRefreshAfterDelete }: CleanupViewProps) 
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-        {categories.length === 0 ? (
-          <div className="h-48 flex items-center justify-center text-slate-400 text-sm">
+        {allItems.length === 0 ? (
+          <div className="h-48 flex items-center justify-center text-slate-500 dark:text-slate-400 text-sm font-semibold">
+            Please run a scan first to detect cleanable items.
+          </div>
+        ) : categories.length === 0 ? (
+          <div className="h-48 flex items-center justify-center text-slate-400 text-sm font-semibold">
             No cleanup items found. Your disk is optimized!
           </div>
         ) : (

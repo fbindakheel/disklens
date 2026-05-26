@@ -173,8 +173,12 @@ export default function HeatmapView({ onRefreshAfterDelete }: HeatmapViewProps) 
         </div>
 
         <div className="flex-1 overflow-y-auto border border-slate-500/10 rounded-xl pr-1">
-          {filteredDeadFiles.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-slate-400 text-xs">
+          {allItems.length === 0 ? (
+            <div className="h-full flex items-center justify-center text-slate-500 dark:text-slate-400 text-sm font-semibold">
+              Please run a scan first to view the file age heatmap.
+            </div>
+          ) : filteredDeadFiles.length === 0 ? (
+            <div className="h-full flex items-center justify-center text-slate-400 text-xs font-semibold">
               No files found untouched since {filterYear}
             </div>
           ) : (

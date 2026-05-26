@@ -147,7 +147,7 @@ export default function App() {
         )}
 
         <div className="flex-1 flex flex-col min-h-0">
-          {!scanHeader && !isScanning ? (
+          {activeTab === 'overview' && !scanHeader && !isScanning ? (
             <div className="flex-1 flex flex-col items-center justify-center text-slate-400 space-y-4">
               <div className="h-16 w-16 text-teal-600/40 animate-bounce flex items-center justify-center text-3xl font-black rounded-3xl bg-slate-800/20">
                 DL
