@@ -1,0 +1,18 @@
+# Dependency directories
+node_modules/
+
+# Compilation outputs
+dist/
+dist_electron/
+
+# Caches
+.eslintcache
+.vite/
+.npm/
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
