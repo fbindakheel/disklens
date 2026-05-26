@@ -23,7 +23,7 @@ export class MacScanner {
     onComplete: (result: any) => void,
     onError: (err: any) => void
   ) {
-    const workerPath = path.join(__dirname, 'scanner/worker.js');
+    const workerPath = path.join(__dirname, 'worker.js');
     this.worker = new Worker(workerPath, {
       workerData: { rootPath }
     });

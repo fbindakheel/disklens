@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { AlertCircle } from 'lucide-react';
 import Sidebar from './components/layout/Sidebar';
 import TopBar from './components/layout/TopBar';
@@ -25,8 +25,17 @@ export default function App() {
     scanError,
     setAllItems,
     setDuplicates,
-    setScanHeader
+    setScanHeader,
+    darkMode
   } = useDiskStore();
+
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [darkMode]);
 
   const formatSize = (bytes: number) => {
     if (bytes === 0) return '0 B';
