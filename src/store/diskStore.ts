@@ -37,7 +37,7 @@ interface DiskState {
 export const useDiskStore = create<DiskState>((set) => ({
   activeTab: 'overview',
   darkMode: true,
-  scanPath: process.platform === 'win32' ? 'C:\\' : '/',
+  scanPath: navigator.userAgent.toLowerCase().includes('win') ? 'C:\\' : '/',
   isScanning: false,
   scanProgress: null,
   scanTime: 0,
