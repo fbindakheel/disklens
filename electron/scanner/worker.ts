@@ -1,5 +1,5 @@
 import { parentPort, workerData } from 'worker_threads';
-import * as fs from 'fs/promises';
+import * as fs from 'fs';
 import * as path from 'path';
 
 interface ScanProgress {
@@ -52,86 +52,97 @@ function reportProgress(currentFolder: string) {
   }
 }
 
-// Track visited realpaths to prevent infinite symlink loops
-const visitedDirs = new Set<string>();
-
-async function scan(dirPath: string, depth = 0) {
-  if (isStopped) return;
-  
-  try {
-    // Prevent infinite symlink loops
-    let realPath = dirPath;
-    try {
-      realPath = await fs.realpath(dirPath);
-    } catch {
-      // Fallback
-    }
-
-    if (visitedDirs.has(realPath)) return;
-    visitedDirs.add(realPath);
-
-    const entries = await fs.readdir(dirPath, { withFileTypes: true });
-    foldersScanned++;
-    reportProgress(dirPath);
-
-    const subdirs: string[] = [];
-
-    for (const entry of entries) {
-      if (isStopped) return;
-      const fullPath = path.join(dirPath, entry.name);
-
-      try {
-        if (entry.isSymbolicLink()) {
-          // Skip symlinks to avoid cross-device bounds and loop traps
-          continue;
-        }
-
-        if (entry.isDirectory()) {
-          subdirs.push(fullPath);
-        } else if (entry.isFile()) {
-          const stat = await fs.stat(fullPath);
-          const size = stat.size;
-          const mtime = stat.mtimeMs;
-          const type = getFileType(entry.name);
-
-          const item: FileItem = {
-            path: fullPath,
-            name: entry.name,
-            size,
-            modifiedTime: mtime,
-            isDir: false,
-            type,
-            depth
-          };
-
-          allItems.push(item);
-          filesScanned++;
-          bytesScanned += size;
-        }
-      } catch (err) {
-        // Inaccessible
-      }
-    }
-
-    // High concurrency crawl
-    await Promise.all(subdirs.map(subdir => scan(subdir, depth + 1)));
-
-  } catch (err) {
-    // Inaccessible
-  }
+interface StackItem {
+  dirPath: string;
+  depth: number;
 }
+
+const stack: StackItem[] = [{ dirPath: rootPath, depth: 0 }];
+const visitedDirs = new Set<string>();
 
 async function startScan() {
   const startTime = Date.now();
-  
+  let lastYieldTime = Date.now();
+
   parentPort?.on('message', (msg) => {
     if (msg.type === 'stop') {
       isStopped = true;
     }
   });
 
-  await scan(rootPath);
-  
+  while (stack.length > 0 && !isStopped) {
+    const { dirPath, depth } = stack.pop()!;
+
+    try {
+      let realPath = dirPath;
+      try {
+        realPath = fs.realpathSync(dirPath);
+      } catch {
+        // Fallback
+      }
+
+      if (visitedDirs.has(realPath)) continue;
+      visitedDirs.add(realPath);
+
+      foldersScanned++;
+      reportProgress(dirPath);
+
+      // Periodically yield to event loop (every 50ms) to process stop message and keep UI responsive
+      const now = Date.now();
+      if (now - lastYieldTime > 50) {
+        await new Promise((resolve) => setImmediate(resolve));
+        lastYieldTime = Date.now();
+      }
+
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+      for (const entry of entries) {
+        if (isStopped) break;
+        const fullPath = path.join(dirPath, entry.name);
+
+        try {
+          if (entry.isSymbolicLink()) {
+            continue;
+          }
+
+          if (entry.isDirectory()) {
+            stack.push({ dirPath: fullPath, depth: depth + 1 });
+            allItems.push({
+              path: fullPath,
+              name: entry.name,
+              size: 0,
+              modifiedTime: 0,
+              isDir: true,
+              type: 'folder',
+              depth: depth + 1
+            });
+          } else if (entry.isFile()) {
+            const stat = fs.statSync(fullPath);
+            const size = stat.size;
+            const mtime = stat.mtimeMs;
+            const type = getFileType(entry.name);
+
+            allItems.push({
+              path: fullPath,
+              name: entry.name,
+              size,
+              modifiedTime: mtime,
+              isDir: false,
+              type,
+              depth
+            });
+
+            filesScanned++;
+            bytesScanned += size;
+          }
+        } catch {
+          // Inaccessible individual file/directory
+        }
+      }
+    } catch {
+      // Inaccessible directory
+    }
+  }
+
   if (isStopped) {
     parentPort?.postMessage({ type: 'stopped' });
     return;

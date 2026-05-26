@@ -37,7 +37,7 @@ export class DiskLensDbQueries {
     await fs.writeFile(this.scansPath, JSON.stringify(scans, null, 2));
 
     const detailPath = path.join(this.baseDir, 'scans', `scan_${header.id}.json`);
-    await fs.writeFile(detailPath, JSON.stringify(files));
+    await fs.writeFile(detailPath, JSON.stringify(files.filter(f => f.isDir)));
   }
 
   async getScanDetails(id: string): Promise<FileEntry[] | null> {
