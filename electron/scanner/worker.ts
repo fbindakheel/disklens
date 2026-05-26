@@ -1,5 +1,5 @@
 import { parentPort, workerData } from 'worker_threads';
-import * as fs from 'fs';
+import * as fs from 'fs/promises';
 import * as path from 'path';
 
 interface ScanProgress {
@@ -28,17 +28,9 @@ function getFileType(fileName: string): string {
   return (ext && fileTypes[ext]) || 'other';
 }
 
-interface FileItem {
-  path: string;
-  name: string;
-  size: number;
-  modifiedTime: number;
-  isDir: boolean;
-  type: string;
-  depth: number;
-}
-
-const allItems: FileItem[] = [];
+const allItems: any[] = [];
+const folderSizes = new Map<string, number>();
+const visitedDirs = new Set<string>();
 
 let lastReportTime = Date.now();
 function reportProgress(currentFolder: string) {
@@ -52,17 +44,136 @@ function reportProgress(currentFolder: string) {
   }
 }
 
-interface StackItem {
-  dirPath: string;
-  depth: number;
+// Simple Promise-based Semaphore to limit concurrency and saturate disk queues
+class Semaphore {
+  private permits: number;
+  private queue: (() => void)[] = [];
+
+  constructor(permits: number) {
+    this.permits = permits;
+  }
+
+  async acquire() {
+    if (this.permits > 0) {
+      this.permits--;
+      return;
+    }
+    return new Promise<void>((resolve) => {
+      this.queue.push(resolve);
+    });
+  }
+
+  release() {
+    this.permits++;
+    if (this.queue.length > 0) {
+      this.permits--;
+      const next = this.queue.shift()!;
+      next();
+    }
+  }
 }
 
-const stack: StackItem[] = [{ dirPath: rootPath, depth: 0 }];
-const visitedDirs = new Set<string>();
+// Limit concurrent file stats to 512 and directory reads to 128 to saturate IO queues without running out of handles
+const statSemaphore = new Semaphore(512);
+const dirSemaphore = new Semaphore(128);
+
+function addSizeToAncestors(filePath: string, size: number) {
+  let dir = path.dirname(filePath);
+  while (true) {
+    folderSizes.set(dir, (folderSizes.get(dir) || 0) + size);
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+}
+
+async function scanDir(dirPath: string, depth = 0) {
+  if (isStopped) return;
+
+  let realPath = dirPath;
+  try {
+    realPath = await fs.realpath(dirPath);
+  } catch {
+    // Fallback
+  }
+
+  if (visitedDirs.has(realPath)) return;
+  visitedDirs.add(realPath);
+
+  await dirSemaphore.acquire();
+  
+  let entries;
+  try {
+    entries = await fs.readdir(dirPath, { withFileTypes: true });
+  } catch {
+    dirSemaphore.release();
+    return;
+  }
+
+  foldersScanned++;
+  reportProgress(dirPath);
+
+  // Add the directory entry immediately
+  allItems.push({
+    path: dirPath,
+    name: path.basename(dirPath) || dirPath,
+    size: 0, // Assigned at the end
+    modifiedTime: Date.now(),
+    isDir: true,
+    type: 'folder',
+    depth
+  });
+
+  dirSemaphore.release();
+
+  const filePromises: Promise<void>[] = [];
+  const dirPromises: Promise<void>[] = [];
+
+  for (const entry of entries) {
+    if (isStopped) break;
+    const fullPath = path.join(dirPath, entry.name);
+
+    if (entry.isSymbolicLink()) continue;
+
+    if (entry.isDirectory()) {
+      dirPromises.push(scanDir(fullPath, depth + 1));
+    } else if (entry.isFile()) {
+      filePromises.push((async () => {
+        await statSemaphore.acquire();
+        try {
+          const stat = await fs.stat(fullPath);
+          const size = stat.size;
+          bytesScanned += size;
+          filesScanned++;
+
+          addSizeToAncestors(fullPath, size);
+
+          // Only keep files >= 100KB to protect V8 memory limits and prevent frontend lag/crashes
+          if (size >= 102400) {
+            allItems.push({
+              path: fullPath,
+              name: entry.name,
+              size,
+              modifiedTime: stat.mtimeMs,
+              isDir: false,
+              type: getFileType(entry.name),
+              depth: depth + 1
+            });
+          }
+        } catch {
+          // File read error
+        } finally {
+          statSemaphore.release();
+        }
+      })());
+    }
+  }
+
+  await Promise.all([...filePromises, ...dirPromises]);
+}
 
 async function startScan() {
   const startTime = Date.now();
-  let lastYieldTime = Date.now();
 
   parentPort?.on('message', (msg) => {
     if (msg.type === 'stop') {
@@ -70,82 +181,18 @@ async function startScan() {
     }
   });
 
-  while (stack.length > 0 && !isStopped) {
-    const { dirPath, depth } = stack.pop()!;
-
-    try {
-      let realPath = dirPath;
-      try {
-        realPath = fs.realpathSync(dirPath);
-      } catch {
-        // Fallback
-      }
-
-      if (visitedDirs.has(realPath)) continue;
-      visitedDirs.add(realPath);
-
-      foldersScanned++;
-      reportProgress(dirPath);
-
-      // Periodically yield to event loop (every 50ms) to process stop message and keep UI responsive
-      const now = Date.now();
-      if (now - lastYieldTime > 50) {
-        await new Promise((resolve) => setImmediate(resolve));
-        lastYieldTime = Date.now();
-      }
-
-      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-      for (const entry of entries) {
-        if (isStopped) break;
-        const fullPath = path.join(dirPath, entry.name);
-
-        try {
-          if (entry.isSymbolicLink()) {
-            continue;
-          }
-
-          if (entry.isDirectory()) {
-            stack.push({ dirPath: fullPath, depth: depth + 1 });
-            allItems.push({
-              path: fullPath,
-              name: entry.name,
-              size: 0,
-              modifiedTime: 0,
-              isDir: true,
-              type: 'folder',
-              depth: depth + 1
-            });
-          } else if (entry.isFile()) {
-            const stat = fs.statSync(fullPath);
-            const size = stat.size;
-            const mtime = stat.mtimeMs;
-            const type = getFileType(entry.name);
-
-            allItems.push({
-              path: fullPath,
-              name: entry.name,
-              size,
-              modifiedTime: mtime,
-              isDir: false,
-              type,
-              depth
-            });
-
-            filesScanned++;
-            bytesScanned += size;
-          }
-        } catch {
-          // Inaccessible individual file/directory
-        }
-      }
-    } catch {
-      // Inaccessible directory
-    }
-  }
+  await scanDir(rootPath, 0);
 
   if (isStopped) {
     parentPort?.postMessage({ type: 'stopped' });
     return;
+  }
+
+  // Populate actual directory sizes from our ancestor map
+  for (const item of allItems) {
+    if (item.isDir) {
+      item.size = folderSizes.get(item.path) || 0;
+    }
   }
 
   parentPort?.postMessage({
