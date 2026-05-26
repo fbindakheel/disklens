@@ -1,16 +1,16 @@
 import { Worker } from 'worker_threads';
 import * as path from 'path';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export class MacScanner {
   private worker: Worker | null = null;
 
   async getDiskMetadata(rootPath: string): Promise<any> {
     try {
-      const { stdout } = await execAsync(`diskutil info "${rootPath}"`);
+      const { stdout } = await execFileAsync('diskutil', ['info', rootPath]);
       return stdout;
     } catch {
       return null;

@@ -9,10 +9,24 @@ import { findDuplicates } from './duplicates/hasher';
 
 const scanner = new DiskScanner();
 
+function isValidPath(p: string): boolean {
+  if (typeof p !== 'string') return false;
+  try {
+    const resolved = path.resolve(p);
+    return !p.includes('..') && !resolved.includes('..') && path.isAbsolute(resolved);
+  } catch {
+    return false;
+  }
+}
+
 export function registerIpcHandlers(mainWindow: BrowserWindow, database: DiskLensDbQueries) {
   
   // Platform specific scanning
   ipcMain.on('scan-directory', async (event, rootPath) => {
+    if (!isValidPath(rootPath)) {
+      mainWindow.webContents.send('scan-error', 'Invalid scan target directory path.');
+      return;
+    }
     scanner.start(
       rootPath,
       (progress) => {
@@ -59,15 +73,23 @@ export function registerIpcHandlers(mainWindow: BrowserWindow, database: DiskLen
   });
 
   ipcMain.handle('delete-paths', async (event, paths: string[]) => {
-    return await safeDelete(paths);
+    const validatedPaths = paths.filter(isValidPath);
+    if (validatedPaths.length !== paths.length) {
+      return [{ path: 'validation', success: false, error: 'Path traversal or invalid path detected.' }];
+    }
+    return await safeDelete(validatedPaths);
   });
 
   ipcMain.on('show-item-in-folder', (event, p) => {
-    shell.showItemInFolder(p);
+    if (isValidPath(p)) {
+      shell.showItemInFolder(p);
+    }
   });
 
   ipcMain.on('open-file', (event, p) => {
-    shell.openPath(p);
+    if (isValidPath(p)) {
+      shell.openPath(p);
+    }
   });
 
   // Smart junk detection

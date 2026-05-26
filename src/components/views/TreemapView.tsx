@@ -41,9 +41,49 @@ export default function TreemapView({ rootNode }: TreemapViewProps) {
     return findNode(rootNode) || rootNode;
   }, [rootNode, currentPath]);
 
-  // Convert to D3 hierarchy format
+  // Convert to D3 hierarchy format with pruning to prevent UI freezes on 1M+ file counts
   const hierarchyData = useMemo(() => {
-    return d3.hierarchy(activeNode)
+    const minSize = activeNode.size * 0.0005; // 0.05% threshold
+    
+    const prune = (node: TreeMapNode): TreeMapNode => {
+      if (!node.children || node.children.length === 0) return { ...node };
+
+      const keptChildren: TreeMapNode[] = [];
+      let otherSize = 0;
+      let otherCount = 0;
+
+      for (const child of node.children) {
+        if (child.size >= minSize) {
+          if (child.isDir) {
+            keptChildren.push(prune(child));
+          } else {
+            keptChildren.push({ ...child });
+          }
+        } else {
+          otherSize += child.size;
+          otherCount++;
+        }
+      }
+
+      if (otherCount > 0) {
+        keptChildren.push({
+          name: `Others (${otherCount} files)`,
+          path: node.path + '/others_placeholder',
+          size: otherSize,
+          isDir: false,
+          type: 'other'
+        });
+      }
+
+      return {
+        ...node,
+        children: keptChildren
+      };
+    };
+
+    const prunedTree = prune(activeNode);
+
+    return d3.hierarchy(prunedTree)
       .sum(d => d.isDir ? 0 : d.size)
       .sort((a, b) => (b.value || 0) - (a.value || 0));
   }, [activeNode]);

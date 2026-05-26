@@ -27,6 +27,16 @@ export default function TableView({ onRefreshAfterDelete }: TableViewProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPaths, setSelectedPaths] = useState<Record<string, boolean>>({});
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: TableItem } | null>(null);
+  const [listHeight, setListHeight] = useState(480);
+
+  React.useEffect(() => {
+    const handleResize = () => {
+      setListHeight(Math.max(window.innerHeight - 340, 300));
+    };
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const maxItemSize = useMemo(() => {
     return Math.max(...allItems.map((i) => i.size), 1);
@@ -320,7 +330,7 @@ export default function TableView({ onRefreshAfterDelete }: TableViewProps) {
           </div>
         ) : (
           <List
-            height={450}
+            height={listHeight}
             itemCount={visibleItems.length}
             itemSize={42}
             width="100%"
